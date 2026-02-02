@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SalarisPro Enterprise - Versión Blindada</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        /* Evita que el navegador intente "ayudar" bloqueando teclas */
+        input { touch-action: manipulation; }
+    </style>
+</head>
+<body class="bg-[#0f172a] text-slate-200 min-h-screen p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto space-y-6">
+        
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-slate-800 border border-slate-700 p-5 rounded-2xl">
+                <p class="text-xs text-slate-400 uppercase font-bold tracking-widest">Total Bruto</p>
+                <p id="totalBruto" class="text-2xl font-mono text-white font-bold">$0.00</p>
+            </div>
+            <div class="bg-slate-800 border border-slate-700 p-5 rounded-2xl">
+                <p class="text-xs text-red-400 uppercase font-bold tracking-widest">Retenciones ISR</p>
+                <p id="totalISR" class="text-2xl font-mono text-red-400 font-bold">$0.00</p>
+            </div>
+            <div class="bg-slate-800 border border-slate-700 p-5 rounded-2xl">
+                <p class="text-xs text-orange-400 uppercase font-bold tracking-widest">Costo Patronal</p>
+                <p id="totalCarga" class="text-2xl font-mono text-orange-400 font-bold">$0.00</p>
+            </div>
+            <div class="bg-emerald-600 p-5 rounded-2xl shadow-lg shadow-emerald-900/40">
+                <p class="text-xs text-emerald-100 uppercase font-bold tracking-widest">COSTO TOTAL EMPRESA</p>
+                <p id="totalEmpresa" class="text-2xl font-mono text-white font-bold">$0.00</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            
+            <div class="lg:col-span-1 bg-slate-800 p-6 rounded-2xl border border-slate-700 h-fit space-y-4">
+                <h2 class="text-lg font-bold text-blue-400 border-b border-slate-700 pb-2">Captura</h2>
+                
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">TRABAJADOR / PUESTO</label>
+                    <input type="text" id="nombre" 
+                        class="w-full bg-slate-900 border border-slate-600 p-3 rounded-xl outline-none text-white focus:border-blue-500" 
+                        placeholder="Nombre">
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">SALARIO DIARIO (SD)</label>
+                    <input type="tel" id="salarioDiario" 
+                        class="w-full bg-slate-900 border border-slate-600 p-3 rounded-xl outline-none text-2xl font-mono text-blue-400" 
+                        placeholder="0.00">
+                </div>
+
+                <div class="pt-2 space-y-2">
+                    <button id="btnCalcular" class="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-bold text-white transition-all active:scale-95 shadow-lg">
+                        Registrar
+                    </button>
+                    <div class="flex gap-2">
+                        <button id="btnExcel" disabled class="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-20 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 text-white">
+                            📊 Excel
+                        </button>
+                        <button id="btnLimpiar" class="px-4 bg-slate-700 hover:bg-red-900/40 py-3 rounded-xl transition-all">
+                            🗑️
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-3 bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-xl">
+                <div class="overflow-x-auto max-h-[600px]">
+                    <table class="w-full text-sm">
+                        <thead class="bg-slate-900/80 text-slate-500 text-left">
+                            <tr>
+                                <th class="p-4 font-medium">Empleado</th>
+                                <th class="p-4 text-right">Neto Sem.</th>
+                                <th class="p-4 text-right text-red-400">ISR</th>
+                                <th class="p-4 text-right text-orange-400">Patronal</th>
+                                <th class="p-4 text-right font-bold text-slate-300">Costo Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaCuerpo" class="divide-y divide-slate-700/50"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let historial = JSON.parse(localStorage.getItem('nomina_db')) || [];
+
+        const tarifas = [
+            {lim: 0.01, cuota: 0.00, tasa: 0.0192},
+            {lim: 844.60, cuota: 16.22, tasa: 0.0640},
+            {lim: 7168.52, cuota: 420.95, tasa: 0.1088},
+            {lim: 12598.03, cuota: 1011.68, tasa: 0.1600},
+            {lim: 14644.65, cuota: 1339.14, tasa: 0.1792},
+            {lim: 17533.65, cuota: 1856.84, tasa: 0.2136},
+            {lim: 35365.84, cuota: 5665.16, tasa: 0.2352},
+            {lim: 55736.69, cuota: 10457.09, tasa: 0.3000},
+            {lim: 106410.51, cuota: 25659.23, tasa: 0.3200},
+            {lim: 141880.67, cuota: 37009.69, tasa: 0.3400},
+            {lim: 425642.00, cuota: 133488.54, tasa: 0.3500}
+        ];
+
+        const fmt = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
+
+        function ejecutarCalculo() {
+            const nomIn = document.getElementById('nombre');
+            const sdIn = document.getElementById('salarioDiario');
+            const sd = parseFloat(sdIn.value.replace(/[^0-9.]/g, ''));
+            
+            if (!sd || sd <= 0) return;
+
+            const baseM = sd * 30.4;
+            const r = [...tarifas].reverse().find(t => baseM >= t.lim);
+            const isrM = ((baseM - r.lim) * r.tasa) + r.cuota;
+            const isrS = (isrM / 30.4) * 7;
+            const brutoS = sd * 7;
+            const netoS = brutoS - isrS;
+            const cargaP = brutoS * 0.295;
+
+            historial.unshift({
+                n: nomIn.value || "Empleado",
+                sd: sd,
+                b: brutoS,
+                isr: isrS,
+                c: cargaP,
+                net: netoS,
+                total: brutoS + cargaP
+            });
+
+            localStorage.setItem('nomina_db', JSON.stringify(historial));
+            renderizar();
+            nomIn.value = "";
+            sdIn.value = "";
+            nomIn.focus();
+        }
+
+        function renderizar() {
+            let sB = 0, sI = 0, sC = 0, sE = 0;
+            document.getElementById('tablaCuerpo').innerHTML = historial.map(r => {
+                sB += r.b; sI += r.isr; sC += r.c; sE += r.total;
+                return `
+                    <tr class="hover:bg-slate-700/20">
+                        <td class="p-4 font-bold text-slate-300">${r.n.toUpperCase()}</td>
+                        <td class="p-4 text-right text-green-400 font-bold">${fmt.format(r.net)}</td>
+                        <td class="p-4 text-right text-red-400 text-xs">${fmt.format(r.isr)}</td>
+                        <td class="p-4 text-right text-orange-400 text-xs">${fmt.format(r.c)}</td>
+                        <td class="p-4 text-right text-white italic bg-slate-900/30">${fmt.format(r.total)}</td>
+                    </tr>`;
+            }).join('');
+
+            document.getElementById('totalBruto').innerText = fmt.format(sB);
+            document.getElementById('totalISR').innerText = fmt.format(sI);
+            document.getElementById('totalCarga').innerText = fmt.format(sC);
+            document.getElementById('totalEmpresa').innerText = fmt.format(sE);
+            document.getElementById('btnExcel').disabled = historial.length === 0;
+        }
+
+        // Asignación de eventos manual para evitar bloqueos
+        document.getElementById('btnCalcular').onclick = ejecutarCalculo;
+        document.getElementById('salarioDiario').onkeydown = (e) => { if(e.key === 'Enter') ejecutarCalculo(); };
+        document.getElementById('btnLimpiar').onclick = () => { if(confirm("¿Borrar todo?")) { historial=[]; localStorage.clear(); renderizar(); }};
+        
+        document.getElementById('btnExcel').onclick = () => {
+            const ws = XLSX.utils.json_to_sheet(historial.map(r => ({
+                "Empleado": r.n, "SD": r.sd, "Bruto": r.b, "ISR": r.isr, "Carga": r.c, "Neto": r.net, "Total": r.total
+            })));
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Nómina");
+            XLSX.writeFile(wb, "Nomina_Enterprise.xlsx");
+        };
+
+        window.onload = () => { renderizar(); document.getElementById('nombre').focus(); };
+    </script>
+</body>
+</html>
